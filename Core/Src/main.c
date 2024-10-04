@@ -32,7 +32,7 @@
 /* USER CODE BEGIN PTD */
 
 typedef struct{
-	uint16_t data;
+	uint16_t data[4];
 
 } Rx_Can_t;
 
@@ -54,6 +54,8 @@ typedef struct{
 
 FDCAN_HandleTypeDef hfdcan1;
 
+FDCAN_FilterTypeDef filtercan;
+
 SD_HandleTypeDef hsd1;
 
 TIM_HandleTypeDef htim1;
@@ -70,6 +72,8 @@ static void MX_GPIO_Init(void);
 static void MX_FDCAN1_Init(void);
 static void MX_SDMMC1_SD_Init(void);
 static void MX_TIM1_Init(void);
+static void TIMER_init(void);
+static void CAN_init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -80,14 +84,15 @@ static void MX_TIM1_Init(void);
 uint32_t id;
 uint8_t j = 0;
 Rx_Can_t CAN_local_data[53];
-uint16_t RxBuffer[4];
+uint8_t RxBuffer[4];
 
 
 char redSD[] = "exemplo"; // return value for sd
-char SDPath[] = "0:\Users\corre\OneDrive\Documentos"; // sd logical drive path
+char SDPath[]; // sd logical drive path
+char buffer[100];
 FATFS SDFatFS; // file system object for sd logical driver
 FIL SDFile; // file object for sd
-UINT testByte;
+UINT *testByte;
 
 
 /* USER CODE END 0 */
@@ -99,7 +104,35 @@ UINT testByte;
 int main(void)
 {
   /* USER CODE BEGIN 1 */
+	void CAN_init(void){
+		if(HAL_FDCAN_Init(&hfdcan1) != HAL_OK){
+			Error_Handler();
+		}
+		if(HAL_FDCAN_ActivateNotification(&hfdcan1, FDCAN_IT_RX_BUFFER_NEW_MESSAGE, 0) != HAL_OK){
+			Error_Handler();
+		}
+		if(HAL_FDCAN_Start(&hfdcan1) != HAL_OK){
+			Error_Handler();
+		}
 
+	}
+
+	void TIMER_init(){
+
+		  if (HAL_TIM_Base_Init(&htim1) != HAL_OK)
+		  {
+		    /* Initialization Error */
+		    Error_Handler();
+		  }
+
+		  /*##-2- Start the TIM Base generation in interrupt mode ####################*/
+		  /* Start Channel1 */
+		  if (HAL_TIM_Base_Start_IT(&htim1) != HAL_OK)
+		  {
+		    /* Starting Error */
+		    Error_Handler();
+		  }
+	}
 
   /* USER CODE END 1 */
 
@@ -133,7 +166,8 @@ int main(void)
 
   f_mount(&SDFatFS, SDPath, 1);
   f_open(&SDFile, "Arquivo.csv", FA_READ | FA_WRITE);
-  fprintf("ECU_TIMER,STEERING_WHEEL,THROTTLE");
+  sprintf(buffer,  "ECU_TIMER,STEERING_WHEEL,THROTTLE");
+  f_write(&SDFile, buffer, strlen(buffer), testByte);
   f_close(&SDFile);
 
 
@@ -151,6 +185,60 @@ int main(void)
 
   /* USER CODE END 3 */
 }
+
+
+void CAN_init(void){
+	if(HAL_FDCAN_Init(&hfdcan1) != HAL_OK){
+		Error_Handler();
+	}
+	if(HAL_FDCAN_ActivateNotification(&hfdcan1, FDCAN_IT_RX_BUFFER_NEW_MESSAGE, 0) != HAL_OK){
+		Error_Handler();
+	}
+	if(HAL_FDCAN_Start(&hfdcan1) != HAL_OK){
+		Error_Handler();
+	}
+
+}
+
+void TIMER_init(void){
+
+	  if (HAL_TIM_Base_Init(&htim1) != HAL_OK)
+	  {
+	    /* Initialization Error */
+	    Error_Handler();
+	  }
+
+	  /*##-2- Start the TIM Base generation in interrupt mode ####################*/
+	  /* Start Channel1 */
+	  if (HAL_TIM_Base_Start_IT(&htim1) != HAL_OK)
+	  {
+	    /* Starting Error */
+	    Error_Handler();
+	  }
+}
+
+//Configurado para realizar uma interupção a cada 1 segundo
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+
+
+	f_open(&SDFile, SDPath, FA_READ | FA_WRITE);
+	sprintf(buffer,"\r\n%d,%d,%d", CAN_local_data[1].data[1], CAN_local_data[1].data[2], CAN_local_data[1].data[3]);
+	f_write(&SDFile, buffer, strlen(buffer), testByte);
+	f_close(&SDFile);
+}
+
+void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
+{
+
+	if(HAL_FDCAN_GetRxMessage(&hfdcan1, FDCAN_RX_FIFO0, &rxHeader, RxBuffer) != HAL_OK){
+		Error_Handler();
+	}
+	for(int i = 0; i < 4; i++){
+	CAN_local_data[rxHeader.Identifier].data[i] = RxBuffer[i];
+	}
+}
+
 
 /**
   * @brief System Clock Configuration
@@ -178,12 +266,12 @@ void SystemClock_Config(void)
   RCC_OscInitStruct.HSEState = RCC_HSE_ON;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
   RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
-  RCC_OscInitStruct.PLL.PLLM = 4;
-  RCC_OscInitStruct.PLL.PLLN = 75;
-  RCC_OscInitStruct.PLL.PLLP = 10;
-  RCC_OscInitStruct.PLL.PLLQ = 4;
+  RCC_OscInitStruct.PLL.PLLM = 1;
+  RCC_OscInitStruct.PLL.PLLN = 19;
+  RCC_OscInitStruct.PLL.PLLP = 2;
+  RCC_OscInitStruct.PLL.PLLQ = 19;
   RCC_OscInitStruct.PLL.PLLR = 2;
-  RCC_OscInitStruct.PLL.PLLRGE = RCC_PLL1VCIRANGE_1;
+  RCC_OscInitStruct.PLL.PLLRGE = RCC_PLL1VCIRANGE_3;
   RCC_OscInitStruct.PLL.PLLVCOSEL = RCC_PLL1VCOMEDIUM;
   RCC_OscInitStruct.PLL.PLLFRACN = 0;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
@@ -196,15 +284,15 @@ void SystemClock_Config(void)
   RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
                               |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2
                               |RCC_CLOCKTYPE_D3PCLK1|RCC_CLOCKTYPE_D1PCLK1;
-  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_HSE;
+  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
   RCC_ClkInitStruct.SYSCLKDivider = RCC_SYSCLK_DIV1;
   RCC_ClkInitStruct.AHBCLKDivider = RCC_HCLK_DIV1;
-  RCC_ClkInitStruct.APB3CLKDivider = RCC_APB3_DIV2;
-  RCC_ClkInitStruct.APB1CLKDivider = RCC_APB1_DIV2;
-  RCC_ClkInitStruct.APB2CLKDivider = RCC_APB2_DIV2;
-  RCC_ClkInitStruct.APB4CLKDivider = RCC_APB4_DIV2;
+  RCC_ClkInitStruct.APB3CLKDivider = RCC_APB3_DIV1;
+  RCC_ClkInitStruct.APB1CLKDivider = RCC_APB1_DIV1;
+  RCC_ClkInitStruct.APB2CLKDivider = RCC_APB2_DIV1;
+  RCC_ClkInitStruct.APB4CLKDivider = RCC_APB4_DIV1;
 
-  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_0) != HAL_OK)
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_1) != HAL_OK)
   {
     Error_Handler();
   }
@@ -231,7 +319,7 @@ static void MX_FDCAN1_Init(void)
   hfdcan1.Init.AutoRetransmission = DISABLE;
   hfdcan1.Init.TransmitPause = DISABLE;
   hfdcan1.Init.ProtocolException = DISABLE;
-  hfdcan1.Init.NominalPrescaler = 25;
+  hfdcan1.Init.NominalPrescaler = 1;
   hfdcan1.Init.NominalSyncJumpWidth = 2;
   hfdcan1.Init.NominalTimeSeg1 = 13;
   hfdcan1.Init.NominalTimeSeg2 = 2;
@@ -240,17 +328,17 @@ static void MX_FDCAN1_Init(void)
   hfdcan1.Init.DataTimeSeg1 = 13;
   hfdcan1.Init.DataTimeSeg2 = 2;
   hfdcan1.Init.MessageRAMOffset = 0;
-  hfdcan1.Init.StdFiltersNbr = 0;
+  hfdcan1.Init.StdFiltersNbr = 2;
   hfdcan1.Init.ExtFiltersNbr = 0;
-  hfdcan1.Init.RxFifo0ElmtsNbr = 0;
+  hfdcan1.Init.RxFifo0ElmtsNbr = 32;
   hfdcan1.Init.RxFifo0ElmtSize = FDCAN_DATA_BYTES_8;
-  hfdcan1.Init.RxFifo1ElmtsNbr = 0;
+  hfdcan1.Init.RxFifo1ElmtsNbr = 32;
   hfdcan1.Init.RxFifo1ElmtSize = FDCAN_DATA_BYTES_8;
-  hfdcan1.Init.RxBuffersNbr = 0;
+  hfdcan1.Init.RxBuffersNbr = 32;
   hfdcan1.Init.RxBufferSize = FDCAN_DATA_BYTES_8;
-  hfdcan1.Init.TxEventsNbr = 0;
-  hfdcan1.Init.TxBuffersNbr = 0;
-  hfdcan1.Init.TxFifoQueueElmtsNbr = 0;
+  hfdcan1.Init.TxEventsNbr = 32;
+  hfdcan1.Init.TxBuffersNbr = 32;
+  hfdcan1.Init.TxFifoQueueElmtsNbr = 32;
   hfdcan1.Init.TxFifoQueueMode = FDCAN_TX_FIFO_OPERATION;
   hfdcan1.Init.TxElmtSize = FDCAN_DATA_BYTES_8;
   if (HAL_FDCAN_Init(&hfdcan1) != HAL_OK)
@@ -366,8 +454,8 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOD_CLK_ENABLE();
 
-  /*Configure GPIO pin : PD0 */
-  GPIO_InitStruct.Pin = GPIO_PIN_0;
+  /*Configure GPIO pins : PD0 PD5 PD6 */
+  GPIO_InitStruct.Pin = GPIO_PIN_0|GPIO_PIN_5|GPIO_PIN_6;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
